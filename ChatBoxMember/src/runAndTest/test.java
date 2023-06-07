@@ -1,41 +1,42 @@
 package runAndTest;
 
-import javax.swing.*;
-import javax.swing.event.ListSelectionEvent;
-import javax.swing.event.ListSelectionListener;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 
 public class test {
-    private JFrame frame;
-    private JList<String> groupList;
+	private static void doSendRequest(String cmd, String... cont) {
+		try {
+				String request = cmd + "<?>";
+				// varargs sẽ là mảng gồm các đối số được truyền vào. Lặp qua mảng để lấy các đối số
+				for (String c : cont) {
+					request += c + "<?>";
+				}
+				System.out.println(request);
+		} catch (Exception e) {
 
-    public test() {
-        frame = new JFrame("Chat Application");
-        groupList = new JList<>(new String[]{"Group 1", "Group 2", "Group 3"});
-
-        groupList.addListSelectionListener(new ListSelectionListener() {
-            @Override
-            public void valueChanged(ListSelectionEvent e) {
-                if (!e.getValueIsAdjusting()) {
-                    String selectedGroup = groupList.getSelectedValue();
-                    // Xử lý hiển thị tin nhắn của group đã chọn
-                    System.out.println("Selected Group: " + selectedGroup);
-                }
-            }
-        });
-
-        frame.add(new JScrollPane(groupList));
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.pack();
-        frame.setVisible(true);
-    }
-
-    public static void main(String[] args) {
-    	SwingUtilities.invokeLater(new Runnable() {
-            @Override
-            public void run() {
-                new test();
-            }
-        });
+		}
 	}
-    
+	
+    public static void main(String[] args) {
+    	 int option = JOptionPane.showConfirmDialog(null, "Bạn có muốn tiếp tục?", "Xác nhận", JOptionPane.OK_CANCEL_OPTION);
+         
+         if (option == JOptionPane.OK_OPTION) {
+             // Người dùng đã chọn "OK"
+             System.out.println("Đã xác nhận");
+         } else if (option == JOptionPane.CANCEL_OPTION) {
+             // Người dùng đã chọn "Cancel"
+             System.out.println("Đã hủy bỏ");
+         } else if (option == JOptionPane.CLOSED_OPTION) {
+             // Người dùng đã đóng hộp thoại
+             System.out.println("Đã đóng hộp thoại");
+         }
+    	
+//    	doSendRequest("check", "helo", "toi la quan");
+    	
+    }
 }
