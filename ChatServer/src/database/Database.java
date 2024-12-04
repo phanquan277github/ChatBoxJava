@@ -4,6 +4,9 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 
+import com.mysql.cj.xdevapi.Client;
+
+import model.ClientModel;
 import model.MessageModel;
 import server.Server;
 
@@ -19,22 +22,18 @@ public class Database {
     private static String USERNAME = "root";
     private static String PASSWORD = "phanquan277";
     
-    public ArrayList<String> getAccountList() {
+    public int checkLogin(String username, String password) {
     	Connection conn = null;
-		String row = null;
-		ArrayList<String> storage = new ArrayList<>();
 		try {
+			String sql = "SELECT * FROM TA_ACC_Account WHERE T_userName = ? AND T_password = ?";
 			conn = DriverManager.getConnection(URL, USERNAME, PASSWORD);
-	    	Statement st = conn.createStatement();
-			ResultSet rs = st.executeQuery("select * from ta_acc_account");
-			
-			while(rs.next()) {
-				int id = rs.getInt(1);		// các số 1, 2, 3 trong hàm get là thứ tự của cột trong DB
-				String userName = rs.getString(2);
-				String password = rs.getString(3);
-				row = id + "<?>" + userName + "<?>" + password; 
-				storage.add(row);
-			}
+			PreparedStatement statement = conn.prepareStatement(sql);
+            statement.setString(1, username);
+            statement.setString(2, password);
+            ResultSet resultSet = statement.executeQuery();
+            if (resultSet.next()) {
+            	return resultSet.getInt("I_id");
+            };
 		} catch (SQLException e) {
 			e.printStackTrace();
 		} finally {
@@ -44,18 +43,47 @@ public class Database {
 				e.printStackTrace();
 			}	// ngắt kết nối sau khi hoàn thành truy vấn
 		}
-    	return storage;
+    	return -1;
     }
     
-    public void createAccount(String userName, String password) {
+    public int checkUsername(String username) {
     	Connection conn = null;
+		try {
+			String sql = "SELECT * FROM TA_ACC_Account WHERE T_userName = ?";
+			conn = DriverManager.getConnection(URL, USERNAME, PASSWORD);
+			PreparedStatement statement = conn.prepareStatement(sql);
+            statement.setString(1, username);
+            ResultSet resultSet = statement.executeQuery();
+            if (resultSet.next()) return resultSet.getInt("I_id");
+		} catch (SQLException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				conn.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}	// ngắt kết nối sau khi hoàn thành truy vấn
+		}
+    	return -1;
+    }
+    
+    public int createAccount(String userName, String password) {
+    	Connection conn = null;
+    	int generatedId = -1; 
 		try {
 			conn = DriverManager.getConnection(URL, USERNAME, PASSWORD);
 	    	String query = "insert into ta_acc_account(T_userName, T_password) values (?, ?)";
-	    	PreparedStatement preSt = conn.prepareStatement(query);
+	    	PreparedStatement preSt = conn.prepareStatement(query, Statement.RETURN_GENERATED_KEYS);
 	    	preSt.setString(1, userName);
 	    	preSt.setString(2, password);
-	    	preSt.executeUpdate();
+	    	 int rowsAffected = preSt.executeUpdate();
+	         if (rowsAffected > 0) {
+	             ResultSet generatedKeys = preSt.getGeneratedKeys();
+	             if (generatedKeys.next()) {
+	                 generatedId = generatedKeys.getInt(1);
+	                 System.out.println("ID: "+generatedId);
+	             }
+	         }
 		} catch (SQLException e) {
 			e.printStackTrace();
 		} finally {
@@ -65,62 +93,47 @@ public class Database {
 				e.printStackTrace();
 			}
 		}
-    }
+		return generatedId;
+    }   
     
-    public int getAccountIdByUserName(String userName) {
+    public ClientModel getClientInfo(int id, String type) {
     	Connection conn = null;
-		int row = 0;
+    	ClientModel clientModel = null;
 		try {
 			conn = DriverManager.getConnection(URL, USERNAME, PASSWORD);
-	    	Statement st = conn.createStatement();
-			ResultSet rs = st.executeQuery("select I_id from ta_acc_account where T_userName = '"+ userName +"'");
-			
-			while(rs.next()) {
-				row = rs.getInt(1);
+			String query = null;
+			if (type.equals("byAccId")) {
+				query = "select * from ta_mbr_member where I_account_id = ?"; 
+			} else if (type.equals("byClientId")) {
+				query = "select * from ta_mbr_member where I_id = ?"; 
 			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-		} finally {
-			try {
-				conn.close();
-			} catch (SQLException e) {
-				e.printStackTrace();
-			}	
-		}
-    	return row;
-    }
-    
-    public String getMemberInfoByAccountId(int accountId) {
-    	Connection conn = null;
-		String row = null;
-		try {
-			conn = DriverManager.getConnection(URL, USERNAME, PASSWORD);
-	    	Statement st = conn.createStatement();
-			ResultSet rs = st.executeQuery("select * from ta_mbr_member where I_account_id = "+ accountId);
-			
+	    	PreparedStatement preparedStatement = conn.prepareStatement(query);
+	    	preparedStatement.setInt(1, id);
+	    	
+			ResultSet rs = preparedStatement.executeQuery();
 			while(rs.next()) {
-				int id = rs.getInt("I_id");
+				int clientId = rs.getInt("I_id");
 				String name = rs.getString("T_name");
 				int accId = rs.getInt("I_account_id");
-				String gender = rs.getString("T_gender");
 				String phone = rs.getString("T_phone_number");
+				Boolean gender = rs.getBoolean("T_gender");
 				Date birthday = rs.getDate("D_birthday");
-				String birthString = "null";
-				if(birthday != null) {
-					birthString = birthday.toString();
-				}
-				row = id + "<?>" + name + "<?>" + accId + "<?>" + gender + "<?>" + phone + "<?>" + birthString;
+				byte[] avata = rs.getBytes("B_avata");
+				Timestamp createdAt = rs.getTimestamp("created_at");
+				Timestamp updateAt = rs.getTimestamp("updated_at");
+				
+				clientModel = new ClientModel(clientId, name, accId, gender, phone, birthday, avata, createdAt, updateAt);
 			}
 		} catch (SQLException e) {
 			e.printStackTrace();
 		} finally {
 			try {
-				conn.close();// ngắt kết nối sau khi hoàn thành truy vấn
+				conn.close();
 			} catch (SQLException e) {
 				e.printStackTrace();
-			}	
+			}
 		}
-    	return row;
+    	return clientModel;
     }
     
     public void createMember(String memberName, int accountId) {
@@ -407,9 +420,9 @@ public class Database {
 				String content = rs.getString("T_content");
 				String typeMsg = rs.getString("typeMsg");
 				String fileName = rs.getString("T_file_name");
-				byte[] fileData = rs.getBytes("T_file_data");
-				Timestamp createdAt = rs.getTimestamp("createdAt");
-				Timestamp updateAt = rs.getTimestamp("updateAt");
+				byte[] fileData = rs.getBytes("B_file_data");
+				Timestamp createdAt = rs.getTimestamp("created_at");
+				Timestamp updateAt = rs.getTimestamp("updated_at");
 				
 				if (typeMsg.equals("isTxt")) {
 					MessageModel msg = new MessageModel();
@@ -448,17 +461,33 @@ public class Database {
 		}
     	return storage;
     }
+    
+    public static boolean isImageFile(String fileName) {
+		String[] IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"};
+        if (fileName == null || fileName.isEmpty()) {
+            return false;
+        }
 
+        String fileNameLower = fileName.toLowerCase(); // Chuyển về chữ thường để so sánh
+        for (String ext : IMAGE_EXTENSIONS) {
+            if (fileNameLower.endsWith(ext)) {
+                return true; // Tên file có đuôi là file ảnh
+            }
+        }
+        return false; // Không phải file ảnh
+    }
+    
     public void addFile(int memberId, int groupId, String fileName, byte[] fileData) {
     	Connection conn = null;
 		try {
 			conn = DriverManager.getConnection(URL, USERNAME, PASSWORD);
-	    	String query = "insert into ta_grp_files(I_member_id,  I_group_id, T_file_name, B_file_data) values (?, ?, ?, ?)"; 
+	    	String query = "insert into ta_msg_message(I_member_id,  I_group_id, T_file_name, B_file_data, typeMsg) values (?, ?, ?, ?, ?)";
 	    	PreparedStatement preparedStatement = conn.prepareStatement(query);
 	    	preparedStatement.setInt(1, memberId);
 	    	preparedStatement.setInt(2, groupId);
 	    	preparedStatement.setString(3, fileName);
 	    	preparedStatement.setBytes(4, fileData);
+	    	preparedStatement.setString(5, "isFile");
 	    	preparedStatement.executeUpdate();	    	
 		} catch (SQLException e) {
 			e.printStackTrace();
@@ -471,39 +500,32 @@ public class Database {
 		}
     }
     
-//    public ArrayList<String> getFileListByGroupId(int groupId) {
-//    	Connection conn = null;
-//		String row = null;
-//		ArrayList<String> storage = new ArrayList<>();
-//		try {
-//			conn = DriverManager.getConnection(URL, USERNAME, PASSWORD);
-//	    	Statement st = conn.createStatement();
-//			ResultSet rs = st.executeQuery("select I_id, T_file_name from ta_grp_files where I_group_id = "+ groupId + " ORDER BY I_id");
-//			
-//			while(rs.next()) {
-//				int fileId = rs.getInt("I_id");
-//				String fileName = rs.getString("T_file_name");
-//				row = fileId + "<?>" + fileName;
-//				storage.add(row);
-//			}
-//		} catch (SQLException e) {
-//			e.printStackTrace();
-//		} finally {
-//			try {
-//				conn.close();
-//			} catch (SQLException e) {
-//				e.printStackTrace();
-//			}
-//		}
-//    	return storage;
-//    }
+    public void updateAvata(int memberId, byte[] fileData) {
+    	Connection conn = null;
+		try {
+			conn = DriverManager.getConnection(URL, USERNAME, PASSWORD);
+	    	String query = "update ta_mbr_member SET B_avata=? where I_id=?";
+	    	PreparedStatement preparedStatement = conn.prepareStatement(query);
+	    	preparedStatement.setInt(2, memberId);
+	    	preparedStatement.setBytes(1, fileData);
+	    	preparedStatement.executeUpdate();	    	
+		} catch (SQLException e) {
+			e.printStackTrace();
+		} finally {
+			try {
+				conn.close();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+    }
     
     public byte[] getFileDataById(int fileId) {
     	Connection conn = null;
     	byte[] fileData = null ;
 		try {
 			conn = DriverManager.getConnection(URL, USERNAME, PASSWORD);
-	    	String query = "SELECT B_file_data FROM ta_grp_files WHERE I_id = "+fileId; 
+	    	String query = "SELECT B_file_data FROM ta_msg_message WHERE I_id = "+fileId; 
 	    	PreparedStatement preparedStatement = conn.prepareStatement(query);
 	    	ResultSet rs = preparedStatement.executeQuery();
 	    	
@@ -521,17 +543,17 @@ public class Database {
 		}
 		return fileData;
     }
-    
-    public void updateClientInfo(int clientId, String nickName, String gender, String phone, String birthDay) {
+
+    public void updateClientInfo(ClientModel clientModel) {
     	Connection conn = null;
 		try {
 			conn = DriverManager.getConnection(URL, USERNAME, PASSWORD);
-	    	String query = "UPDATE ta_mbr_member SET T_name = ?, T_gender= ?, T_phone_number = ?, D_birthday = ? where I_id = "+clientId; 
+	    	String query = "UPDATE ta_mbr_member SET T_name = ?, T_gender= ?, T_phone_number = ?, D_birthday = ? where I_id = "+clientModel.getId(); 
 	    	PreparedStatement preparedStatement = conn.prepareStatement(query);
-	    	preparedStatement.setString(1, nickName);
-	    	preparedStatement.setString(2, gender);
-	    	preparedStatement.setString(3, phone);
-	    	preparedStatement.setString(4, birthDay);
+	    	preparedStatement.setString(1, clientModel.getName());
+	    	preparedStatement.setBoolean(2, clientModel.getGender());
+	    	preparedStatement.setString(3, clientModel.getPhone());
+	    	preparedStatement.setDate(4, clientModel.getBirthday());
 	    	preparedStatement.executeUpdate();	    	
 		} catch (SQLException e) {
 			e.printStackTrace();
@@ -702,41 +724,4 @@ public class Database {
 			}
 		}
     }
-    
-    public String getClientInfo(int clientId) {
-    	Connection conn = null;
-		String row = "";
-		try {
-			conn = DriverManager.getConnection(URL, USERNAME, PASSWORD);
-			String query = "select * from ta_mbr_member where I_id = ?"; 
-	    	PreparedStatement preparedStatement = conn.prepareStatement(query);
-	    	preparedStatement.setInt(1, clientId);
-	    	
-			ResultSet rs = preparedStatement.executeQuery();
-			while(rs.next()) {
-				int id = rs.getInt("I_id");
-				String name = rs.getString("T_name");
-				int accId = rs.getInt("I_account_id");
-				String phone = rs.getString("T_phone_number");
-				String gender = rs.getString("T_gender");
-				Date birthday = rs.getDate("D_birthday");
-				
-				row += id + "<?>" + name + "<?>" + accId+  "<?>" + gender + "<?>" + phone + "<?>" + birthday ;
-			}
-		} catch (SQLException e) {
-			e.printStackTrace();
-		} finally {
-			try {
-				conn.close();
-			} catch (SQLException e) {
-				e.printStackTrace();
-			}
-		}
-    	return row;
-    }
-    public static void main(String[] args) {
-    	Database db = new Database();
-    	db.deleteGroup(13);
-    	
-	}
 }

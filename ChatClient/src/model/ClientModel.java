@@ -1,40 +1,67 @@
 package model;
 
-import java.util.Date;
+import java.io.Serializable;
+import java.sql.Timestamp;
+import java.sql.Date;
 
-public class ClientModel {
+public class ClientModel  implements Serializable {
+	private static final long serialVersionUID = 1L; // Đảm bảo tính tương thích khi serial hóa/giải serial hóa
 	private int id;
 	private String name;
 	private int accountId;
-	private String gender;
+	private Boolean gender;
 	private String phone;
 	private Date birthday;
+	private byte[] avata;
+	private Timestamp createAt;
+	private Timestamp updateAt;
 	
 	public ClientModel() {
-		this.id = 0;
-		this.name = "";
-		this.accountId = 0;
-		this.gender = "";
-		this.phone = "";
-		this.birthday = null;
 	}
 	
-	public ClientModel(int id, String name, int accountId, String gender, String phone, Date birthday) {
+	public ClientModel(int id, String name, int accountId, Boolean gender, String phone, Date birthday, byte[] avata,
+			Timestamp createAt, Timestamp updateAt) {
+		super();
 		this.id = id;
 		this.name = name;
 		this.accountId = accountId;
 		this.gender = gender;
 		this.phone = phone;
 		this.birthday = birthday;
+		this.avata = avata;
+		this.createAt = createAt;
+		this.updateAt = updateAt;
+	}
+	
+	public byte[] getAvata() {
+		return avata;
 	}
 
-	
-	
-	public String getGender() {
+	public void setAvata(byte[] avata) {
+		this.avata = avata;
+	}
+
+	public Timestamp getCreateAt() {
+		return createAt;
+	}
+
+	public void setCreateAt(Timestamp createAt) {
+		this.createAt = createAt;
+	}
+
+	public Timestamp getUpdateAt() {
+		return updateAt;
+	}
+
+	public void setUpdateAt(Timestamp updateAt) {
+		this.updateAt = updateAt;
+	}
+
+	public Boolean getGender() {
 		return gender;
 	}
 
-	public void setGender(String gender) {
+	public void setGender(Boolean gender) {
 		this.gender = gender;
 	}
 

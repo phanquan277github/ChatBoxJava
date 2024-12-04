@@ -56,7 +56,7 @@ public class ServerFrame extends JFrame {
         jPanel1.setLayout(new java.awt.BorderLayout());
 
         clientTableModel = new DefaultTableModel(new String [] {
-                "IP Address", "Thời gian truy cập", "Ngắt kết nối", "Title 4"
+                "IP Address", "Thời gian truy cập", "Port", "Ngắt kết nối"
             }, 0);
         tableClientAccess.setModel(clientTableModel);
 

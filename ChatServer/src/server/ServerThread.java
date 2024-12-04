@@ -2,24 +2,36 @@ package server;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.OutputStream;
 import java.net.Socket;
+import java.nio.ByteBuffer;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import database.Database;
+import model.ClientModel;
 import model.MessageModel;
 import view.ServerFrame;
 
 public class ServerThread extends Thread {
 	private Socket socket;
+	private InputStream inStream;
+	private OutputStream outStream;
     private DataInputStream in;
     private DataOutputStream out;
     private ObjectOutputStream objOut;
+	private ObjectInputStream objIn;
     private Database db;
     private ClientManagement client;
     
@@ -49,9 +61,12 @@ public class ServerThread extends Thread {
             
 			this.client.setTimeIn(connectTime.format(formatter).toString());
 			this.db = new Database();
+			this.outStream = socket.getOutputStream();
+			this.inStream = socket.getInputStream();
 			this.in = new DataInputStream(socket.getInputStream());
 			this.out = new DataOutputStream(socket.getOutputStream());
 			this.objOut = new ObjectOutputStream(socket.getOutputStream());
+			this.objIn = new ObjectInputStream(socket.getInputStream());
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -61,7 +76,7 @@ public class ServerThread extends Thread {
 		try {
 			synchronized(objOut) {
 				objOut.writeObject(obj);
-				out.flush();
+				objOut.flush();
 			}
 		}catch(Exception e) {
 			e.printStackTrace();
@@ -108,21 +123,21 @@ public class ServerThread extends Thread {
     public void run() {
     	try {
 			String message;
+			ClientModel clientModel;
 			while(!socket.isClosed()){
 				message = in.readUTF();
             	String[] handle = message.split("\\<\\$\\>");
             	switch(handle[0]) {
+	            	case "checkLogin":
+	            		checkLogin(handle[1], handle[2]); // neu account đúng trả về thong tin của client tuong ung
+	            		break;
 	            	case "checkUserName":
 	            		userNameIsExist(handle[1], "createAccount"); // phản hồi true nếu tồn tại userName
 	        			break;
 	            	case "createAccount": 
-	            		db.createAccount(handle[1], handle[2]);
-	            		int accountId = db.getAccountIdByUserName(handle[1]);
+	            		int accountId = db.createAccount(handle[1], handle[2]);
 	            		db.createMember(handle[3], accountId);
 	            		doSendResponse("createAccount", "true");
-	            		break;
-	            	case "checkLogin":
-	            		checkLogin(handle[1], handle[2]); // neu account đúng trả về thong tin của client tuong ung
 	            		break;
 	            	case "getGroupList":
             			String reply2 = "";
@@ -173,28 +188,20 @@ public class ServerThread extends Thread {
             				doSendObjResponse(messageList);
             			}
             			break;
-//            		case "getFileList": 
-//            			String replyFile = "";
-//            			ArrayList<String> fileList = db.getFileListByGroupId(client.getCurentGroupId());
-//            			if(fileList.size() == 0) {
-//    						replyFile += "empty" + "<$>";
-//    					}else {
-//    						for (String gr : fileList) {
-//    							replyFile += gr + "<#>";
-//            				}
-//    					}
-//        				doSendResponse("getFileList", replyFile);
-//            			break;
             		case "newFile":
             			String fileName = handle[1];
             			int fileSize = Integer.parseInt(handle[2]);
-            			
-            			// đọc dữ liệu file
             			byte[] fileData = new byte[fileSize];
                         in.readFully(fileData);
-            			
                         db.addFile(client.getClientId(), client.getCurentGroupId(), fileName, fileData);
-            			Server.mThreadManager.notifyNewFile(client.getCurentGroupId());
+            			Server.mThreadManager.notifyNewMessage(client.getCurentGroupId());
+            			break;
+            		case "updateAvata":
+            			String avatata = handle[1];
+            			int avataSize = Integer.parseInt(handle[2]);
+            			byte[] avataData = new byte[avataSize];
+                        in.readFully(avataData);
+                        db.updateAvata(client.getClientId(), avataData);
             			break;
             		case "downloadFile":
             			int fileId = Integer.parseInt(handle[1]);
@@ -206,13 +213,16 @@ public class ServerThread extends Thread {
             			client.setCurentGroupId(Integer.parseInt(handle[1]));
             			break;
             		case "updateClientInfo":
-            			db.updateClientInfo(Integer.parseInt(handle[1]), handle[2], handle[3], handle[4], handle[5]);
-            			String clientInfo = db.getClientInfo(Integer.parseInt(handle[1]));
-            			doSendResponse("getClientInfo", clientInfo);
+            			clientModel = (ClientModel) objIn.readObject();
+            			db.updateClientInfo(clientModel);
+            			ClientModel clientInfo = db.getClientInfo(clientModel.getId(), "byClientId");
+            			doSendResponse("getClientInfo");
+            			doSendObjResponse(clientInfo);
             			break;
             		case "getClientInfo":
-            			String clientInfo2 = db.getClientInfo(Integer.parseInt(handle[1]));
-            			doSendResponse("getClientInfo", clientInfo2);
+            			ClientModel clientInfo2 = db.getClientInfo(Integer.parseInt(handle[1]), "byClientId");
+            			doSendResponse("getClientInfo");
+            			doSendObjResponse(clientInfo2);
             			break;
             		case "getFriendsList":
             			String friendsList = db.getFriendsList(handle[1]);
@@ -248,71 +258,89 @@ public class ServerThread extends Thread {
             			doSendResponse("updateFriendRequestList");
             			Server.mThreadManager.notifyUpdateFriensList(Integer.parseInt(handle[2]));
             			break;
-            		case "logOut":
-            			System.out.println("debug log out serrver");
-//            			Server.mThreadManager.remove(this);
-//            			socket.close();
-            			break;
             		case "deleteGroup":
             			db.deleteGroup(Integer.parseInt(handle[1]));
             			Server.mThreadManager.notifyNewGroup(client.getUserName());
             			break;
-            		}
+            		case "callVideo":
+            			// chuyển tiếp thông báo có call tới client thuộc group đang call
+            			this.client.setCurentGroupId(Integer.parseInt(handle[1]));
+            			Server.mThreadManager.notifyCallVideo(this.client.getCurentGroupId(), this.client.getClientId());
+            			break;
+					case "acceptCallVideo":
+		    			// thông báo với tất cả client là sẵn sàng call
+//		    			Server.mThreadManager.startingCallVideo(this.client.getCurentGroupId(), this.client.getClientId());
+						Server.mThreadManager.notifyAcceptCall(Integer.parseInt(handle[1]));
+		    			break;
+					case "startCallVideo":
+			            System.out.println("startCallVideo:" + client.getClientName());
+						for (ServerThread thread : Server.mThreadManager.getServerThreadList()) {
+							if(thread.getClient().getClientId() != this.client.getClientId() && thread.getClient().getCurentGroupId() == Integer.parseInt(handle[1])) {
+								System.out.println("chuyển tiếp: "+ thread.getClient().getClientName());
+								while(true) {
+									int dataType = in.readInt(); // Loại dữ liệu
+					                if (dataType == 0) { // Dữ liệu từ client
+					                    int imageSize = in.readInt();
+					                    byte[] imageData = new byte[imageSize];
+					                    in.readFully(imageData);
+
+					                    // Gửi dữ liệu đến client khác
+					                    out.writeInt(1);                  // Loại dữ liệu: Server gửi
+					                    out.writeInt(imageSize);          // Kích thước dữ liệu
+					                    out.write(imageData);             // Dữ liệu
+					                    out.flush();
+					                }
+								}
+							}
+						}
+		    			break;
+		    		}
 			}
 		} catch (Exception e) {
 			if (socket.isClosed()) {
                 Server.mThreadManager.remove(this);
-                System.out.println("Load");
+                System.out.println("end");
             }
-
             Server.mThreadManager.remove(this);
-            System.out.println("Load");
+            System.out.println("End");
             Server.loadClientTable();
 			e.printStackTrace();
 		}
     }	
-    
+       
     private void userNameIsExist(String userName, String situation) throws SQLException {
-    	ArrayList<String> accList = db.getAccountList();
-			for (String acc : accList) {
-				String[] tmp = acc.split("\\<\\?\\>");
-				if(tmp[1].equals(userName)) {
-					if(situation.equals("createAccount")) {
-						doSendResponse("checkUserName", "userNameIsExist", userName);
-					}else if(situation.equals("addMemberToGroup")) {
-						doSendResponse("checkUserNameAddMemberToGroup", "userNameIsExist", userName);
-					}else if(situation.equals("addFriend")) {
-						doSendResponse("checkUserNameAddFriend", "userNameIsExist", userName);
-					}
-					return;
-				}
+    	int accountId = db.checkUsername(userName);
+    	if (accountId == -1) {
+    		if(situation.equals("createAccount")) {
+    			doSendResponse("checkUserName", "userNameNotExist", userName);
+    		}else if(situation.equals("addMemberToGroup")) {
+    			doSendResponse("checkUserNameAddMemberToGroup", "userNameNotExist", userName);
+    		}else if(situation.equals("addFriend")) {
+    			doSendResponse("checkUserNameAddFriend", "userNameNotExist", userName);
+    		}
+    	} else {
+    		if(situation.equals("createAccount")) {
+				doSendResponse("checkUserName", "userNameIsExist", userName);
+			}else if(situation.equals("addMemberToGroup")) {
+				doSendResponse("checkUserNameAddMemberToGroup", "userNameIsExist", userName);
+			}else if(situation.equals("addFriend")) {
+				doSendResponse("checkUserNameAddFriend", "userNameIsExist", userName);
 			}
-		if(situation.equals("createAccount")) {
-			doSendResponse("checkUserName", "userNameNotExist", userName);
-		}else if(situation.equals("addMemberToGroup")) {
-			doSendResponse("checkUserNameAddMemberToGroup", "userNameNotExist", userName);
-		}else if(situation.equals("addFriend")) {
-			doSendResponse("checkUserNameAddFriend", "userNameNotExist", userName);
-		}
+    	}
     }
     
     private void checkLogin(String userName, String password) throws SQLException {
-   	 	ArrayList<String> accList = db.getAccountList();
-		for (String acc : accList) {
-			String[] tmp = acc.split("\\<\\?\\>");
-			if(tmp[1].equals(userName) && tmp[2].equals(password)) {
-				int accountId = db.getAccountIdByUserName(userName);
-				String memberInfo = db.getMemberInfoByAccountId(accountId);
-				String path[] = memberInfo.split("\\<\\?\\>");
-				client.setClientId(Integer.parseInt(path[0]));
-				client.setClientName(path[1]);
-				client.setAccountId(Integer.parseInt(path[2]));
-				client.setUserName(userName);
-				String info = db.getClientInfo(Integer.parseInt(path[0]));
-				doSendResponse("checkLogin", "true", info);
-				return;
-			}
-		}
-		doSendResponse("checkLogin", "false");
+    	int accountId = db.checkLogin(userName, password);
+    	if (accountId == -1) {
+    		doSendResponse("checkLogin", "false");
+    	} else {
+			ClientModel clientInfo = db.getClientInfo(accountId, "byAccId");
+    		client.setClientId(clientInfo.getId());
+			client.setClientName(clientInfo.getName());
+			client.setAccountId(clientInfo.getAccountId());
+			client.setUserName(userName);
+			doSendResponse("checkLogin", "true");
+			doSendObjResponse(clientInfo);
+    	}
     }
 }

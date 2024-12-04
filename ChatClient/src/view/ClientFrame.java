@@ -2,26 +2,21 @@ package view;
 
 import java.awt.CardLayout;
 import java.awt.Dimension;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
-
+import java.awt.Image;
 import javax.swing.DefaultListModel;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JMenuItem;
 import javax.swing.JTextPane;
 import javax.swing.ListSelectionModel;
-import javax.swing.text.SimpleAttributeSet;
-import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
-
 import model.ClientModel;
 import model.FileModel;
 import model.FriendRequestModel;
 import model.GroupModel;
-import model.MessageModel;
 
 public class ClientFrame extends javax.swing.JFrame {
-
 	private ClientModel memberModel;
 	private GroupModel groupModel;
 	private DefaultListModel<GroupModel> groupListModel;
@@ -34,6 +29,9 @@ public class ClientFrame extends javax.swing.JFrame {
 	
 	private JTextPane chatPane;
 	private StyledDocument doc;
+	private JButton recordBtn;
+	private JButton callBtn;
+	
 	
     public ClientFrame(ClientModel memberModel, GroupModel groupModel) {
     	this.memberModel = memberModel;
@@ -47,10 +45,26 @@ public class ClientFrame extends javax.swing.JFrame {
     
     
     private void initComponents() {
+    	 ImageIcon micIcon = new ImageIcon(getClass().getResource("/img/mic.png"));
+         Image scaledImage = micIcon.getImage().getScaledInstance(30, 30, Image.SCALE_SMOOTH);
+         ImageIcon scaledMicIcon = new ImageIcon(scaledImage);
+        recordBtn = new JButton(scaledMicIcon);
+        recordBtn.setToolTipText("Ghi âm"); // Tooltip khi hover chuột
+        recordBtn.setPreferredSize(new Dimension(50, 50)); // Kích thước nút
+        recordBtn.setFocusPainted(false); // Loại bỏ khung focus
+      
+        ImageIcon cameraIcon = new ImageIcon(getClass().getResource("/img/camera.png"));
+        Image scaledCamera = cameraIcon.getImage().getScaledInstance(30, 30, Image.SCALE_SMOOTH);
+        ImageIcon scaledCameraIcon = new ImageIcon(scaledCamera);
+	       callBtn = new JButton(scaledCameraIcon);
+	       callBtn.setToolTipText("Call"); // Tooltip khi hover chuột
+	       callBtn.setPreferredSize(new Dimension(50, 50)); // Kích thước nút
+	       callBtn.setFocusPainted(false); // Loại bỏ khung focus
+        
     	chatPane = new JTextPane();
     	chatPane.setEditable(false); 
+    	chatPane.setText("");
     	doc = chatPane.getStyledDocument();
-
     	
     	groupListModel = new DefaultListModel<>();
     	chatListModel = new DefaultListModel<>();
@@ -77,7 +91,6 @@ public class ClientFrame extends javax.swing.JFrame {
         addToGroupBtn = new javax.swing.JButton();
         groupNameLabel = new javax.swing.JLabel();
         showChatScrollPane = new javax.swing.JScrollPane();
-//        showChatList = new javax.swing.JList<>(chatListModel);  //
         filesLabel = new javax.swing.JLabel();
         choseFileBtn = new javax.swing.JButton();
         messageTxt = new javax.swing.JTextField();
@@ -90,9 +103,9 @@ public class ClientFrame extends javax.swing.JFrame {
         updateAvataBtn = new javax.swing.JButton();
         infoPanel = new javax.swing.JPanel();
         nameLabel = new javax.swing.JLabel();
-        nameLabel1 = new javax.swing.JLabel();
-        nameLabel3 = new javax.swing.JLabel();
-        nameLabel2 = new javax.swing.JLabel();
+        genderLabel = new javax.swing.JLabel();
+        phoneLabel = new javax.swing.JLabel();
+        birdayLabel = new javax.swing.JLabel();
         nickNameTxt = new javax.swing.JTextField();
         genderTxt = new javax.swing.JTextField();
         birthdayTxt = new javax.swing.JTextField();
@@ -172,70 +185,80 @@ public class ClientFrame extends javax.swing.JFrame {
         choseFileBtn.setText("File");
         sendBtn.setText("Send");
         jScrollPane1.setViewportView(showFilesList);
-
+        
         javax.swing.GroupLayout mainPanelLayout = new javax.swing.GroupLayout(mainPanel);
         mainPanel.setLayout(mainPanelLayout);
+        
+     // Định nghĩa layout cho mainPanel
         mainPanelLayout.setHorizontalGroup(
             mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(mainPanelLayout.createSequentialGroup()
-                .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addComponent(nickNameLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 210, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(groupPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addGap(2, 2, 2)
-                .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(mainPanelLayout.createSequentialGroup()
-                        .addComponent(createGroupBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 105, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                        .addComponent(groupNameLabel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-                    .addGroup(mainPanelLayout.createSequentialGroup()
-                        .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
-                            .addComponent(showChatScrollPane, javax.swing.GroupLayout.PREFERRED_SIZE, 507, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addGroup(mainPanelLayout.createSequentialGroup()
-                                .addComponent(choseFileBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 90, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addGap(18, 18, 18)
-                                .addComponent(messageTxt)))
-                        .addGap(0, 0, Short.MAX_VALUE)))
-                .addGap(18, 18, 18)
-                .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(mainPanelLayout.createSequentialGroup()
-                        .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
-                            .addComponent(jScrollPane1)
-                            .addComponent(sendBtn, javax.swing.GroupLayout.DEFAULT_SIZE, 205, Short.MAX_VALUE)
-                            .addComponent(filesLabel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-                        .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-                    .addGroup(mainPanelLayout.createSequentialGroup()
-                        .addComponent(addToGroupBtn, javax.swing.GroupLayout.DEFAULT_SIZE, 211, Short.MAX_VALUE)
-                        .addContainerGap())))
+                .addGroup(mainPanelLayout.createSequentialGroup()
+                    .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addComponent(nickNameLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 210, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(groupPanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addGap(2, 2, 2)
+                    .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(mainPanelLayout.createSequentialGroup()
+                            .addComponent(createGroupBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 105, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                            .addComponent(groupNameLabel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                        .addGroup(mainPanelLayout.createSequentialGroup()
+                            .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                                .addComponent(showChatScrollPane, javax.swing.GroupLayout.PREFERRED_SIZE, 507, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addGroup(mainPanelLayout.createSequentialGroup()
+                                    .addComponent(choseFileBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 90, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addGap(18, 18, 18)
+                                    .addComponent(messageTxt, javax.swing.GroupLayout.PREFERRED_SIZE, 330, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addGap(18, 18, 18)
+                                    .addComponent(recordBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 40, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addGap(10, 10, 10) // Khoảng cách giữa recordBtn và callBtn
+                                    .addComponent(callBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 40, javax.swing.GroupLayout.PREFERRED_SIZE))) // Thêm callBtn
+                            .addGap(0, 0, Short.MAX_VALUE)))
+                    .addGap(18, 18, 18)
+                    .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(mainPanelLayout.createSequentialGroup()
+                            .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
+                                .addComponent(jScrollPane1)
+                                .addComponent(sendBtn, javax.swing.GroupLayout.DEFAULT_SIZE, 205, Short.MAX_VALUE)
+                                .addComponent(filesLabel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                            .addContainerGap(javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                        .addGroup(mainPanelLayout.createSequentialGroup()
+                            .addComponent(addToGroupBtn, javax.swing.GroupLayout.DEFAULT_SIZE, 211, Short.MAX_VALUE)
+                            .addContainerGap())))
         );
+
         mainPanelLayout.setVerticalGroup(
             mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-            .addGroup(mainPanelLayout.createSequentialGroup()
-                .addComponent(nickNameLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 39, javax.swing.GroupLayout.PREFERRED_SIZE)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(groupPanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-            .addGroup(mainPanelLayout.createSequentialGroup()
-                .addGap(15, 15, 15)
-                .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(groupNameLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 28, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(createGroupBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(addToGroupBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE))
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addGroup(mainPanelLayout.createSequentialGroup()
-                        .addComponent(filesLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                        .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 361, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addGap(18, 18, 18)
-                        .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                            .addComponent(sendBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(messageTxt, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE))
-                        .addGap(0, 0, Short.MAX_VALUE))
-                    .addGroup(mainPanelLayout.createSequentialGroup()
-                        .addComponent(showChatScrollPane)
-                        .addGap(18, 18, 18)
-                        .addComponent(choseFileBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addGap(18, 18, 18))))
+                .addGroup(mainPanelLayout.createSequentialGroup()
+                    .addComponent(nickNameLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 39, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                    .addComponent(groupPanel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                .addGroup(mainPanelLayout.createSequentialGroup()
+                    .addGap(15, 15, 15)
+                    .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                        .addComponent(groupNameLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 28, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(createGroupBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(addToGroupBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                    .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                        .addGroup(mainPanelLayout.createSequentialGroup()
+                            .addComponent(filesLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                            .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 361, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addGap(18, 18, 18)
+                            .addGroup(mainPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                                .addComponent(sendBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addComponent(messageTxt, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addComponent(recordBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addComponent(callBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)) // Đặt callBtn vào hàng với recordBtn
+                            .addGap(0, 0, Short.MAX_VALUE))
+                        .addGroup(mainPanelLayout.createSequentialGroup()
+                            .addComponent(showChatScrollPane)
+                            .addGap(18, 18, 18)
+                            .addComponent(choseFileBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 30, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addGap(18, 18, 18))))
         );
+
 
         getContentPane().add(mainPanel, "mainPanel");
 
@@ -257,23 +280,23 @@ public class ClientFrame extends javax.swing.JFrame {
         nameLabel.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
         nameLabel.setText("Tên người dùng");
 
-        nameLabel1.setBackground(new java.awt.Color(255, 255, 255));
-        nameLabel1.setFont(new java.awt.Font("Segoe UI", 1, 16)); // NOI18N
-        nameLabel1.setForeground(new java.awt.Color(0, 102, 51));
-        nameLabel1.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
-        nameLabel1.setText("Giới tính");
+        genderLabel.setBackground(new java.awt.Color(255, 255, 255));
+        genderLabel.setFont(new java.awt.Font("Segoe UI", 1, 16)); // NOI18N
+        genderLabel.setForeground(new java.awt.Color(0, 102, 51));
+        genderLabel.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        genderLabel.setText("Giới tính");
 
-        nameLabel3.setBackground(new java.awt.Color(255, 255, 255));
-        nameLabel3.setFont(new java.awt.Font("Segoe UI", 1, 16)); // NOI18N
-        nameLabel3.setForeground(new java.awt.Color(0, 102, 51));
-        nameLabel3.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
-        nameLabel3.setText("Số điện thoại");
+        phoneLabel.setBackground(new java.awt.Color(255, 255, 255));
+        phoneLabel.setFont(new java.awt.Font("Segoe UI", 1, 16)); // NOI18N
+        phoneLabel.setForeground(new java.awt.Color(0, 102, 51));
+        phoneLabel.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        phoneLabel.setText("Số điện thoại");
 
-        nameLabel2.setBackground(new java.awt.Color(255, 255, 255));
-        nameLabel2.setFont(new java.awt.Font("Segoe UI", 1, 16)); // NOI18N
-        nameLabel2.setForeground(new java.awt.Color(0, 102, 51));
-        nameLabel2.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
-        nameLabel2.setText("Ngày sinh (yyyy-mm-dd)");
+        birdayLabel.setBackground(new java.awt.Color(255, 255, 255));
+        birdayLabel.setFont(new java.awt.Font("Segoe UI", 1, 16)); // NOI18N
+        birdayLabel.setForeground(new java.awt.Color(0, 102, 51));
+        birdayLabel.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+        birdayLabel.setText("Ngày sinh (yyyy-mm-dd)");
 
         updateInfoBtn.setText("Cập nhật thông tin");
 
@@ -294,9 +317,9 @@ public class ClientFrame extends javax.swing.JFrame {
                         .addComponent(nickNameTxt, javax.swing.GroupLayout.PREFERRED_SIZE, 317, javax.swing.GroupLayout.PREFERRED_SIZE))
                     .addGroup(infoPanelLayout.createSequentialGroup()
                         .addGroup(infoPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(nameLabel2, javax.swing.GroupLayout.PREFERRED_SIZE, 190, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(nameLabel3, javax.swing.GroupLayout.PREFERRED_SIZE, 190, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(nameLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 190, javax.swing.GroupLayout.PREFERRED_SIZE))
+                            .addComponent(birdayLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 190, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(phoneLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 190, javax.swing.GroupLayout.PREFERRED_SIZE)
+                            .addComponent(genderLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 190, javax.swing.GroupLayout.PREFERRED_SIZE))
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                         .addGroup(infoPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                             .addComponent(phoneNumTxt, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.PREFERRED_SIZE, 317, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -320,17 +343,17 @@ public class ClientFrame extends javax.swing.JFrame {
                     .addComponent(nickNameTxt, javax.swing.GroupLayout.PREFERRED_SIZE, 34, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addGap(29, 29, 29)
                 .addGroup(infoPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(nameLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 34, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(genderLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 34, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(maleRadioButton)
                     .addComponent(femaleRadioButton))
                 .addGap(30, 30, 30)
                 .addGroup(infoPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(phoneNumTxt, javax.swing.GroupLayout.PREFERRED_SIZE, 34, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(nameLabel3, javax.swing.GroupLayout.PREFERRED_SIZE, 34, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(phoneLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 34, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addGap(31, 31, 31)
                 .addGroup(infoPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(birthdayTxt, javax.swing.GroupLayout.PREFERRED_SIZE, 34, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(nameLabel2, javax.swing.GroupLayout.PREFERRED_SIZE, 34, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(birdayLabel, javax.swing.GroupLayout.PREFERRED_SIZE, 34, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, 72, Short.MAX_VALUE)
                 .addComponent(updateInfoBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 40, javax.swing.GroupLayout.PREFERRED_SIZE)
                 .addGap(37, 37, 37))
@@ -451,7 +474,13 @@ public class ClientFrame extends javax.swing.JFrame {
     }// </editor-fold>                        
 
     
-    public DefaultListModel<FriendRequestModel> getFriendRequestListModel() {
+    public JButton getRecordBtn() {
+		return recordBtn;
+	}
+	public void setRecordBtn(JButton recordBtn) {
+		this.recordBtn = recordBtn;
+	}
+	public DefaultListModel<FriendRequestModel> getFriendRequestListModel() {
 		return friendRequestListModel;
 	}
 
@@ -822,22 +851,22 @@ public class ClientFrame extends javax.swing.JFrame {
 		this.nameLabel = nameLabel;
 	}
 	public javax.swing.JLabel getNameLabel1() {
-		return nameLabel1;
+		return genderLabel;
 	}
-	public void setNameLabel1(javax.swing.JLabel nameLabel1) {
-		this.nameLabel1 = nameLabel1;
+	public void setNameLabel1(javax.swing.JLabel genderLabel) {
+		this.genderLabel = genderLabel;
 	}
 	public javax.swing.JLabel getNameLabel2() {
-		return nameLabel2;
+		return birdayLabel;
 	}
-	public void setNameLabel2(javax.swing.JLabel nameLabel2) {
-		this.nameLabel2 = nameLabel2;
+	public void setNameLabel2(javax.swing.JLabel birdayLabel) {
+		this.birdayLabel = birdayLabel;
 	}
 	public javax.swing.JLabel getNameLabel3() {
-		return nameLabel3;
+		return phoneLabel;
 	}
-	public void setNameLabel3(javax.swing.JLabel nameLabel3) {
-		this.nameLabel3 = nameLabel3;
+	public void setNameLabel3(javax.swing.JLabel phoneLabel) {
+		this.phoneLabel = phoneLabel;
 	}
 	public javax.swing.JLabel getNickNameLabel() {
 		return nickNameLabel;
@@ -936,6 +965,15 @@ public class ClientFrame extends javax.swing.JFrame {
 		this.jSeparator3 = jSeparator3;
 	}
 
+	public JButton getCallBtn() {
+		return callBtn;
+	}
+
+
+	public void setCallBtn(JButton callBtn) {
+		this.callBtn = callBtn;
+	}
+
 	private javax.swing.JMenuItem mainMenuItem;
 	private CardLayout cardLayout;
     private javax.swing.JRadioButton maleRadioButton;
@@ -975,9 +1013,9 @@ public class ClientFrame extends javax.swing.JFrame {
     private javax.swing.JPanel mainPanel;
     private javax.swing.JTextField messageTxt;
     private javax.swing.JLabel nameLabel;
-    private javax.swing.JLabel nameLabel1;  
-    private javax.swing.JLabel nameLabel2;
-    private javax.swing.JLabel nameLabel3;
+    private javax.swing.JLabel genderLabel;  
+    private javax.swing.JLabel birdayLabel;
+    private javax.swing.JLabel phoneLabel;
     private javax.swing.JLabel nickNameLabel;
     private javax.swing.JTextField nickNameTxt;
     private javax.swing.JTextField phoneNumTxt;

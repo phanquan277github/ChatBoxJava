@@ -18,6 +18,21 @@ public class ServerMultiThreadMangager {
 		serverThreadList.clear();
 	}
 	
+	public void notifyAcceptCall(int groupId) {
+		for (ServerThread thread : serverThreadList) {
+			if(thread.getClient().getCurentGroupId() == groupId) {
+				thread.doSendResponse("startCallVideo", groupId+"");
+			}
+		}
+	}
+	
+	public void notifyCallVideo(int groupId, int callerId) {
+		for (ServerThread thread : serverThreadList) {
+			if(thread.getClient().getClientId() != callerId && thread.getClient().getCurentGroupId() == groupId) {
+				thread.doSendResponse("newCall", groupId + "");
+			}
+		}
+	}
 	
 	public void notifyNewMessage(int groupId) {
 		for (ServerThread thread : serverThreadList) {
@@ -26,13 +41,7 @@ public class ServerMultiThreadMangager {
 			}
 		}
 	}
-	public void notifyNewFile(int groupId) {
-		for (ServerThread thread : serverThreadList) {
-			if(thread.getClient().getCurentGroupId() == groupId) {
-				thread.doSendResponse("newFile");
-			}
-		}
-	}
+
 	public void notifyNewGroup(String userName) {
 		for (ServerThread thread : serverThreadList) {
 			// kiểm tra thằng nào đang kết nối mà trùng với userName thì thông báo thằng đó mới được thêm vào group

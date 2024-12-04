@@ -2,9 +2,13 @@ package controller;
 
 import java.net.Socket;
 
+import org.opencv.core.Core;
+
 public class Client {
 	  public static void main(String[] args) {
-	    String hostName = "26.241.65.66";
+		System.loadLibrary(Core.NATIVE_LIBRARY_NAME);
+		  
+	    String hostName = "192.168.42.23";
 	    int portNumber = 7777;
 	    try {
 	      Socket socket = new Socket(hostName, portNumber);

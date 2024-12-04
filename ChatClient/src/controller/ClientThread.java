@@ -1,24 +1,55 @@
 package controller;
 
+import java.awt.Image;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.Socket;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import javax.imageio.ImageIO;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.DataLine;
+import javax.sound.sampled.SourceDataLine;
+import javax.sound.sampled.TargetDataLine;
 import javax.swing.*;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
+
+import org.bytedeco.javacv.CanvasFrame;
+import org.bytedeco.javacv.OpenCVFrameConverter;
+import org.opencv.core.CvType;
+import org.opencv.core.Mat;
+import org.opencv.core.MatOfByte;
+import org.opencv.core.Rect;
+import org.opencv.core.Size;
+import org.opencv.highgui.HighGui;
+import org.opencv.imgcodecs.Imgcodecs;
+import org.opencv.imgproc.Imgproc;
+import org.opencv.videoio.VideoCapture;
+
 import model.GroupModel;
 import model.MessageModel;
 import model.ClientModel;
@@ -30,9 +61,12 @@ import view.Register;
 
 public class ClientThread extends Thread {
 	private Socket socket;
+	private OutputStream outStream;
+	private InputStream inStream;
 	private DataOutputStream out;
 	private DataInputStream in;
 	private ObjectInputStream objIn;
+    private ObjectOutputStream objOut;
 	private ClientModel clientModel;
 	private GroupModel groupModel;
 	private ClientFrame clientFrame;
@@ -44,9 +78,11 @@ public class ClientThread extends Thread {
 	public ClientThread(Socket socket) {
 		this.socket = socket;
 		try {
+			outStream = socket.getOutputStream();
 			in = new DataInputStream(socket.getInputStream());
 			out = new DataOutputStream(socket.getOutputStream());
 			objIn = new ObjectInputStream(socket.getInputStream());
+			objOut = new ObjectOutputStream(socket.getOutputStream());
 			try {
 				UIManager.setLookAndFeel("javax.swing.plaf.nimbus.NimbusLookAndFeel"); // tùy chỉnh giao diện cho đẹp
 			} catch (ClassNotFoundException | InstantiationException | IllegalAccessException
@@ -95,7 +131,8 @@ public class ClientThread extends Thread {
 						break;
 					case "checkLogin":
 						if (cmd[1].equals("true")) {
-							doCheckLoginSuccess(cmd[2]);
+							clientModel = (ClientModel) objIn.readObject();
+							doCheckLoginSuccess(clientModel);
 						} else if (cmd[1].equals("false")) {
 							doCheckLoginFailed();
 						}
@@ -127,15 +164,8 @@ public class ClientThread extends Thread {
 						displayMessage(messages, clientModel.getId());
 						doSendRequest("getFileList"); // gọi update file của group
 						break;
-					case "getFileList":
-						// nhận được danh sachs các file của group và hiển thị file
-						renderFile(cmd[1]);
-						break;
 					case "newMessage":
 						doSendRequest("getMessagesList");
-						break;
-					case "newFile":
-						doSendRequest("getFileList");
 						break;
 					case "downloadFile":
 						// đọc dữ liệu file
@@ -174,13 +204,29 @@ public class ClientThread extends Thread {
 						break;
 					case "addFriend":
 						if(cmd[1].equals("unsuccessful")) {
-							JOptionPane.showMessageDialog(null, "Bạn đã kết bạn với " + cmd[2] + " từ trước!",
+							JOptionPane.showMessageDialog(null, "Bạn đã là bạn bè với " + cmd[2] +"!",
 									"Error!", JOptionPane.ERROR_MESSAGE);
 						}
 						break;
 					case "getClientInfo": 
-						updateClientInfo(cmd[1]);
-					
+						ClientModel clientInfo =  (ClientModel) objIn.readObject();
+						updateClientInfo(clientInfo);
+						break;
+					case "newCall":
+						int response = JOptionPane.showConfirmDialog(null, "Cuộc gọi từ nhóm " + cmd[1] + "?", 
+                                "Cuộc gọi video", JOptionPane.YES_NO_OPTION);
+						if (response == JOptionPane.YES_OPTION) {
+					        // Gửi thông báo đồng ý đến server để bắt đầu trao đổi video
+							doSendRequest("acceptCallVideo", cmd[1]);
+					    }
+						break;
+					case "startCallVideo":
+						doSendRequest("startCallVideo", cmd[1]);
+						// bắt đầu luồng gọi và nhận
+						System.out.println("STart call");
+						sendCall();
+						receiveCall();
+//						callVideo();
 						break;
 					}
 				}
@@ -217,60 +263,347 @@ public class ClientThread extends Thread {
 		radioBtnEvent();
 		addFriendBtnEvent();
 		acceptFriendEvent();
+		recortBtnEvent();
+		updateAvataEvent();
+		callVideoEvent();
 	}
 	
+	public void callVideoEvent() {
+	    clientFrame.getCallBtn().addActionListener(new ActionListener() {
+	        @Override
+	        public void actionPerformed(ActionEvent e) {
+	            doSendRequest("callVideo", currentGroup+"");
+	        }
+	    });
+	}
+	
+	private void callVideo() {
+		System.out.println("CALL VIDEO");
+		Mat frame = new Mat(); // Lưu từng khung hình từ camera
+		Mat smallFrame = new Mat();
+		  
+        new Thread(() -> {
+            VideoCapture camera = new VideoCapture(0);
+            
+            byte[] buffer;
+            System.out.println("Đang mở camera... Nhấn ESC để thoát.");
+            while (true) {
+                if (camera.read(frame)) {
+                	 synchronized (smallFrame) {
+                         if (!smallFrame.empty()) {
+                             // Tạo khung hình nhỏ hơn từ `smallFrame`
+                             Size smallSize = new Size(frame.cols() / 4.0, frame.rows() / 4.0);
+                             Mat resizedSmallFrame = new Mat();
+                             Imgproc.resize(smallFrame, resizedSmallFrame, smallSize);
+
+                             // Xác định vị trí chèn vào `frame`
+                             Rect roi = new Rect(frame.cols() - resizedSmallFrame.cols(), 0, resizedSmallFrame.cols(), resizedSmallFrame.rows());
+                             Mat regionOfInterest = frame.submat(roi);
+                             resizedSmallFrame.copyTo(regionOfInterest);
+                         }
+                     }
+                	 
+                    try {
+                        synchronized (outStream) {
+                            buffer = matToBytes(frame);
+                            outStream.write(buffer);
+                            outStream.flush();
+                        }
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
+                    // Hiển thị khung hình với khung nhỏ đã được chèn
+                    HighGui.imshow("Camera Feed", frame);
+                    if (HighGui.waitKey(1) == 27) { // Nhấn ESC để thoát
+                        break;
+                    }
+                } else {
+                    System.out.println("Không thể đọc khung hình từ camera.");
+                }
+            }
+            camera.release();
+            HighGui.destroyAllWindows();
+        }).start();
+        
+        // nhận cuộc gọi
+        new Thread(() -> {
+        	while (true) {
+    	        try {
+    	        	int imageSize = in.readInt();
+	                byte[] imageData = new byte[imageSize];
+	                in.readFully(imageData);
+
+	                Mat decodedFrame = Imgcodecs.imdecode(new MatOfByte(imageData), Imgcodecs.IMREAD_COLOR);
+	                synchronized (smallFrame) {
+	                    decodedFrame.copyTo(smallFrame);
+	                }
+    	        } catch (IOException e) {
+    	            e.printStackTrace();
+    	            break;
+    	        }
+    	    }
+        }).start();
+	}
+	private BlockingQueue<Mat> frameQueue = new LinkedBlockingQueue<>();
+
+	private void sendCall() {
+	    System.out.println("CALL VIDEO");
+	    new Thread(() -> {
+	        VideoCapture camera = new VideoCapture(0);
+	        System.out.println("Đang mở camera...");
+	        try {
+	            Mat frame = new Mat();
+	            while (true) {
+	                if (camera.read(frame)) {
+	                	 // Mã hóa frame thành JPEG
+	                    MatOfByte buffer = new MatOfByte();
+	                    Imgcodecs.imencode(".jpg", frame, buffer);
+	                    byte[] imageBytes = buffer.toArray();
+
+	                    // Gửi loại dữ liệu, kích thước và nội dung
+		                    out.writeInt(0);                  // Loại dữ liệu: Client gửi
+		                    out.writeInt(imageBytes.length); // Kích thước
+		                    out.write(imageBytes);           // Dữ liệu
+		                    out.flush();
+		                    System.out.println("Gửi frame: " + imageBytes.length + " bytes.");
+	                } else {
+	                    System.out.println("Không thể đọc khung hình từ camera.");
+	                }
+	                Thread.sleep(20);
+	            }
+	        } catch (Exception e) {
+	            e.printStackTrace();
+	        } finally {
+	            camera.release();
+	            HighGui.destroyAllWindows();
+	        }
+	    }).start();
+	}
+	
+	private void receiveCall() {
+//		new Thread(() -> {
+        	try {
+        		while (true) {
+        			synchronized (socket) {
+        				int dataType = in.readInt(); // 0 = từ client, 1 = từ server
+                        if (dataType == 1) { // Dữ liệu từ server
+                            int imageSize = in.readInt();
+                            byte[] imageData = new byte[imageSize];
+                            in.readFully(imageData);
+                            // Giải mã hình ảnh
+                            Mat decodedFrame = Imgcodecs.imdecode(new MatOfByte(imageData), Imgcodecs.IMREAD_COLOR);
+                            if (decodedFrame.empty()) {
+                                System.out.println("Frame nhận được không hợp lệ, kích thước: " + imageSize);
+                                continue; // Bỏ qua frame này
+                            }
+                            if (!decodedFrame.empty()) {
+                                HighGui.imshow("Received Feed", decodedFrame);
+                                if (HighGui.waitKey(1) == 27) break; // ESC để thoát
+                            } else {
+                                System.out.println("Frame nhận được không hợp lệ.");
+                            }
+                        }
+					}
+        		}
+   	        } catch (IOException e) {
+   	            e.printStackTrace();
+//   	            break;
+   	        }
+            HighGui.destroyAllWindows();
+//		}).start();
+	}
+	
+	
+	
+	private static Mat bytesToMat(byte[] data) {
+	    return Imgcodecs.imdecode(new MatOfByte(data), Imgcodecs.IMREAD_COLOR);
+	}
+	private static byte[] matToBytes(Mat mat) {
+	    MatOfByte matOfByte = new MatOfByte();
+	    Imgcodecs.imencode(".jpg", mat, matOfByte);  // Lưu dưới dạng định dạng ảnh (ví dụ: JPEG)
+	    return matOfByte.toArray();
+	}
+	
+	public void doSendObj(Object obj) {
+		try {
+			synchronized(objOut) {
+				objOut.writeObject(obj);
+				out.flush();
+			}
+		}catch(Exception e) {
+			e.printStackTrace();
+		}
+	}
+		
+	
+	public void recortBtnEvent() {
+		clientFrame.getRecordBtn().addActionListener(e -> {
+			recordAudio();
+		});
+	}
+	
+	public void recordAudio() {
+	    AudioFormat audioFormat = new AudioFormat(16000.0f, 16, 1, true, true);
+	    DataLine.Info dataLineInfo = new DataLine.Info(TargetDataLine.class, audioFormat);
+
+	    try {
+	        // Lấy dòng dữ liệu từ microphone
+	        TargetDataLine microphone = (TargetDataLine) AudioSystem.getLine(dataLineInfo);
+	        microphone.open(audioFormat);
+	        microphone.start();
+
+	        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+	        byte[] buffer = new byte[1024];
+
+	        Thread thread = new Thread(() -> {
+	            try {
+	                while (true) {
+	                    int bytesRead = microphone.read(buffer, 0, buffer.length);
+	                    if (bytesRead > 0) {
+	                        outputStream.write(buffer, 0, bytesRead);
+	                    }
+	                }
+	            } catch (Exception e) {
+	                e.printStackTrace();
+	            }
+	        });
+	        thread.start(); // bắt đầu ghi âm
+	        int userChoice = JOptionPane.showConfirmDialog(clientFrame, "Đang trong quá trình ghi âm ...", "Ghi âm", JOptionPane.OK_CANCEL_OPTION);
+
+	        thread.interrupt();
+	        microphone.stop();
+	        microphone.close();
+
+	        if (userChoice == JOptionPane.OK_OPTION) {
+	            byte[] audioBytes = outputStream.toByteArray();
+		        doSendFile("newFile", "ghiam.wav", audioBytes);
+	        } else {
+	            System.out.println("Hủy quá trình ghi âm.");
+	        }
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	    }
+	}
+	
+	public void playAudio(byte[] audioBytes) {
+	    AudioFormat audioFormat = new AudioFormat(16000.0f, 16, 1, true, true);
+	    try {
+	        ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(audioBytes);
+	        AudioInputStream audioInputStream = new AudioInputStream(byteArrayInputStream, audioFormat, audioBytes.length / audioFormat.getFrameSize());
+
+	        // Lấy dữ liệu từ AudioInputStream và phát lại âm thanh
+	        DataLine.Info dataLineInfo = new DataLine.Info(SourceDataLine.class, audioFormat);
+	        SourceDataLine sourceDataLine = (SourceDataLine) AudioSystem.getLine(dataLineInfo);
+	        sourceDataLine.open(audioFormat);
+	        sourceDataLine.start();
+	        
+	        // Bộ đệm để đọc dữ liệu và phát lại âm thanh
+	        byte[] buffer = new byte[4096];
+	        int bytesRead;
+	        while ((bytesRead = audioInputStream.read(buffer, 0, buffer.length)) != -1) {
+	            sourceDataLine.write(buffer, 0, bytesRead);
+	        }
+	        
+	        // Đảm bảo âm thanh được phát hết
+	        sourceDataLine.drain();
+	        sourceDataLine.stop();
+	        sourceDataLine.close();
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        JOptionPane.showMessageDialog(null, "Lỗi khi phát âm thanh.");
+	    }
+	}
 	public void displayMessage(List<MessageModel> messages, int currentClientId) {
 		if (messages.isEmpty()) return;
 		clientFrame.getChatPane().setText("");
+    	clientFrame.getFileListModel().clear();
+    	
+	  for (MessageModel message : messages) {
+	        SimpleAttributeSet userStyle = new SimpleAttributeSet();
+	        StyleConstants.setAlignment(userStyle, StyleConstants.ALIGN_RIGHT);
+	        SimpleAttributeSet guestStyle = new SimpleAttributeSet();
+	        StyleConstants.setAlignment(guestStyle, StyleConstants.ALIGN_LEFT);
 
-		  for (MessageModel message : messages) {
-		        SimpleAttributeSet userStyle = new SimpleAttributeSet();
-		        StyleConstants.setAlignment(userStyle, StyleConstants.ALIGN_RIGHT);
-		        SimpleAttributeSet guestStyle = new SimpleAttributeSet();
-		        StyleConstants.setAlignment(guestStyle, StyleConstants.ALIGN_LEFT);
+	        try {
+	            SimpleAttributeSet style = (message.getClientId() == clientModel.getId()) ? userStyle : guestStyle;
+	            if (message.getTypeMsg().equals("isTxt")) {
+			        String messageContent = message.getNickname() + ": " + message.getContent() + "\n";
+		            clientFrame.getDoc().insertString(clientFrame.getDoc().getLength(), messageContent, style);
+		            int messageLength = messageContent.length();
+		            clientFrame.getDoc().setParagraphAttributes(clientFrame.getDoc().getLength() - messageLength, messageLength, style, false);
+		        } else if (isImageFile(message.getFileName())) {
+		        	 // Thêm placeholder cho ảnh
+	                String messageContent = "";
+	                clientFrame.getDoc().insertString(clientFrame.getDoc().getLength(), messageContent, style);
+	                int placeholderPosition = clientFrame.getDoc().getLength();
+		            clientFrame.getDoc().setParagraphAttributes(clientFrame.getDoc().getLength() - messageContent.length(), messageContent.length(), style, false);
+	                
+	                // Load và scale ảnh
+	                ImageIcon originalIcon = new ImageIcon(message.getFileData()); // `getFileData` trả về byte[] của file
+	                Image scaledImage = originalIcon.getImage().getScaledInstance(100, 100, Image.SCALE_SMOOTH);
+	                ImageIcon scaledIcon = new ImageIcon(scaledImage);
+	                
+	                JLabel imageLabel = new JLabel(scaledIcon);
+	                clientFrame.getChatPane().setCaretPosition(placeholderPosition);
+	                clientFrame.getChatPane().insertComponent(imageLabel);
+	                clientFrame.getDoc().insertString(clientFrame.getDoc().getLength(), "\n", style);
+	                clientFrame.getDoc().insertString(clientFrame.getDoc().getLength(), message.getFileName() + "\n", style);
+		        } else if (isAudioFile(message.getFileName())) { // file âm thanh
+		        	 String messageContent = "\n";
+	                clientFrame.getDoc().insertString(clientFrame.getDoc().getLength(), messageContent, style);
+	                int placeholderPosition = clientFrame.getDoc().getLength();
+		            clientFrame.getDoc().setParagraphAttributes(clientFrame.getDoc().getLength() - messageContent.length(), messageContent.length(), style, false);
 
-		        try {
-		            SimpleAttributeSet style = (message.getClientId() == currentClientId) ? userStyle : guestStyle;
-		            
-		            if (message.getTypeMsg().equals("isTxt")) {
-				        String messageContent = message.getNickname() + ": " + message.getContent() + "\n";
-			            clientFrame.getDoc().insertString(clientFrame.getDoc().getLength(), messageContent, style);
-			            int messageLength = messageContent.length();
-			            clientFrame.getDoc().setParagraphAttributes(clientFrame.getDoc().getLength() - messageLength, messageLength, style, false);
-			        } else if (isImageFile(message.getFileName())) {
-		                // Tin nhắn chứa file ảnh
-		                String messageContent = message.getNickname() + ": [Ảnh: " + message.getFileName() + "]\n";
-		                clientFrame.getDoc().insertString(clientFrame.getDoc().getLength(), messageContent, style);
-		                ImageIcon imageIcon = new ImageIcon(message.getFileData()); // `getFileData` trả về byte[] của file
-		                JLabel imageLabel = new JLabel(imageIcon);
-		                clientFrame.getChatPane().insertComponent(imageLabel);
-			        } else {
-		                // Tin nhắn chứa file thường
-		                String messageContent = message.getNickname() + ": [File: " + message.getFileName() + "]\n";
-		                clientFrame.getDoc().insertString(clientFrame.getDoc().getLength(), messageContent, style);
-		                int messageLength = messageContent.length();
-		                clientFrame.getDoc().setParagraphAttributes(clientFrame.getDoc().getLength() - messageLength, messageLength, style, false);
-		            }
-		        } catch (Exception e) {
-		            e.printStackTrace();
-		        }
-		    }
+	                // Tạo nút phát âm thanh với icon mic
+	                ImageIcon originalIcon = new ImageIcon("src/img/audioWave.jpeg"); // `getFileData` trả về byte[] của file
+	                Image scaledImage = originalIcon.getImage().getScaledInstance(150, 35, Image.SCALE_SMOOTH);
+	                ImageIcon scaledIcon = new ImageIcon(scaledImage);
+	                JLabel audioLabel = new JLabel(scaledIcon);
+	                
+	                audioLabel.addMouseListener(new MouseAdapter() {
+	                    @Override
+	                    public void mouseClicked(MouseEvent e) {
+	                        playAudio(message.getFileData());
+	                    }
+	                });
+	                clientFrame.getChatPane().setCaretPosition(placeholderPosition);
+	                clientFrame.getChatPane().insertComponent(audioLabel);
+	                clientFrame.getDoc().insertString(clientFrame.getDoc().getLength(), "\n", style);
+	                clientFrame.getDoc().setParagraphAttributes(clientFrame.getDoc().getLength() - messageContent.length(), messageContent.length(), style, false);
+	            } else {
+	                // Tin nhắn chứa file thường
+	                String messageContent = message.getNickname() + ": [File: " + message.getFileName() + "]\n";
+	                clientFrame.getDoc().insertString(clientFrame.getDoc().getLength(), messageContent, style);
+	                int messageLength = messageContent.length();
+	                clientFrame.getDoc().setParagraphAttributes(clientFrame.getDoc().getLength() - messageLength, messageLength, style, false);
+	            }
+	        } catch (Exception e) {
+	            e.printStackTrace();
+	        }
+	        
+            if (!message.getTypeMsg().equals("isTxt")) {
+    			clientFrame.getFileListModel().addElement(new FileModel(message.getMessageId(), message.getFileName())); // lấy listModel và thêm elemnt là
+            }
+	    }
     }
 	
 	public static boolean isImageFile(String fileName) {
 		String[] IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".webp"};
-        if (fileName == null || fileName.isEmpty()) {
-            return false;
-        }
-
+        if (fileName == null || fileName.isEmpty()) return false;
         String fileNameLower = fileName.toLowerCase(); // Chuyển về chữ thường để so sánh
         for (String ext : IMAGE_EXTENSIONS) {
-            if (fileNameLower.endsWith(ext)) {
-                return true; // Tên file có đuôi là file ảnh
-            }
+            if (fileNameLower.endsWith(ext)) return true; // Tên file có đuôi là file ảnh
         }
         return false; // Không phải file ảnh
     }
+	
+	private boolean isAudioFile(String fileName) {
+	    String[] audioExtensions = {".mp3", ".wav", ".ogg", ".flac", ".m4a"};
+	    for (String ext : audioExtensions) {
+	        if (fileName.toLowerCase().endsWith(ext)) return true;
+	    }
+	    return false;
+	}
 	
 	// String...cont: gọi là varargs (variable arguments) cho phép một phương thức
 	// có số lượng đối số linh động và dễ dàng sử dụng.
@@ -303,6 +636,35 @@ public class ClientThread extends Thread {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+	}
+	
+	private void updateAvataEvent() {
+		clientFrame.getUpdateAvataBtn().addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				 JFileChooser fileChooser = new JFileChooser();
+				 fileChooser.setDialogTitle("Chọn hình ảnh để cập nhật Avatar");
+				 fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Image Files", "jpg", "png", "jpeg", "bmp"));
+				    
+				 int result = fileChooser.showOpenDialog(null);
+			    if (result == JFileChooser.APPROVE_OPTION) {
+			        File selectedFile = fileChooser.getSelectedFile();
+			        ImageIcon imageIcon = new ImageIcon(selectedFile.getAbsolutePath());
+				    Image scaledImage = imageIcon.getImage().getScaledInstance(clientFrame.getAvataLabel().getWidth(), clientFrame.getAvataLabel().getHeight(), Image.SCALE_SMOOTH);
+				    clientFrame.getAvataLabel().setText("");
+				    clientFrame.getAvataLabel().setIcon(new ImageIcon(scaledImage));
+				    // Đọc nội dung của file
+					byte[] fileData;
+					try {
+						fileData = Files.readAllBytes(selectedFile.toPath());
+						doSendFile("updateAvata", selectedFile.getName(), fileData);
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
+					
+			    }
+			}
+		});
 	}
 
 	private void addFriendBtnEvent() {
@@ -338,14 +700,14 @@ public class ClientThread extends Thread {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				clientFrame.getFemaleRadioButton().setSelected(false);
-				clientModel.setGender("Nam");
+				clientModel.setGender(true);
 			}
 		});
 		clientFrame.getFemaleRadioButton().addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				clientFrame.getMaleRadioButton().setSelected(false);
-				clientModel.setGender("Nữ");
+				clientModel.setGender(false);
 			}
 		});
 	}
@@ -362,7 +724,19 @@ public class ClientThread extends Thread {
 					JOptionPane.showMessageDialog(null, "Thông tin không hợp lệ!", "Error!", JOptionPane.ERROR_MESSAGE);
 					return;
 				} else {
-					doSendRequest("updateClientInfo", clientModel.getId() + "", nickName, clientModel.getGender(), phoneNumber, birthday);
+					clientModel.setName(nickName);
+					clientModel.setPhone(phoneNumber);
+					SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+					java.util.Date utilDate;
+					try {
+						utilDate = dateFormat.parse(birthday);
+						java.sql.Date sqlDate = new java.sql.Date(utilDate.getTime()); 
+						clientModel.setBirthday(sqlDate);
+						doSendRequest("updateClientInfo");
+						doSendObj(clientModel);
+					} catch (ParseException e1) {
+						e1.printStackTrace();
+					}
 				}
 			}
 		});
@@ -447,26 +821,6 @@ public class ClientThread extends Thread {
 		});
 	}
 	
-	private void renderFile(String fileListString) {
-		HashMap<Integer, String> fileList = new HashMap<>();
-		String[] list = null;
-		if (!fileListString.equals("empty")) {
-			list = fileListString.split("\\<\\#\\>");
-			for (String grlu : list) {
-				fileList.put(Integer.parseInt(grlu.split("\\<\\?\\>")[0]), grlu.split("\\<\\?\\>")[1]);
-			}
-		}
-
-		clientFrame.getFileListModel().clear();
-		for (Map.Entry<Integer, String> entry : fileList.entrySet()) { // lặp qua hashmap grList để lấy thông tin id,
-																		// name
-			int id = entry.getKey();
-			String value = entry.getValue();
-			clientFrame.getFileListModel().addElement(new FileModel(id, value)); // lấy listModel và thêm elemnt là
-																					// GroupModel
-		}
-	}
-
 	private void renderGroup(String groupListString) {
 		HashMap<Integer, String> groupList = new HashMap<>();
 		String[] grList = null;
@@ -478,8 +832,6 @@ public class ClientThread extends Thread {
 
 		clientFrame.getGroupListModel().clear();
 		for (Map.Entry<Integer, String> entry : groupList.entrySet()) { // lặp qua hashmap grList để lấy thông tin id,
-																		// name
-																		// của group
 			int id = entry.getKey();
 			String value = entry.getValue();
 			clientFrame.getGroupListModel().addElement(new GroupModel(id, value)); // lấy listModel và thêm elemnt là
@@ -488,11 +840,37 @@ public class ClientThread extends Thread {
 	}
 
 	private void sendBtnEvent() {
+		clientFrame.getMessageTxt().addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				if (transformSendBtn.equals("sendFile")) {
+					File file = clientFrame.getFileUpChooser().getSelectedFile();
+					// Đọc nội dung của file
+					byte[] fileData;
+					try {
+						fileData = Files.readAllBytes(file.toPath());
+						// gửi nội dung file lên server
+						doSendFile("newFile", file.getName(), fileData);
+					} catch (IOException e1) {
+						e1.printStackTrace();
+					}
+					clientFrame.getMessageTxt().setText("");
+					transformSendBtn = "";
+				} else {
+					String message = clientFrame.getMessageTxt().getText();
+					if (message.equals("")) {
+						return;
+					} else {
+						doSendRequest("newMessage", message);
+						clientFrame.getMessageTxt().setText("");
+					}
+				}
+			}
+		});
+		
 		clientFrame.getSendBtn().addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				
-				
 				if (transformSendBtn.equals("sendFile")) {
 					File file = clientFrame.getFileUpChooser().getSelectedFile();
 					// Đọc nội dung của file
@@ -523,7 +901,7 @@ public class ClientThread extends Thread {
 		clientFrame.getCreateGroupBtn().addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				String groupName = (String) JOptionPane.showInputDialog(null, "Nhập nickname: ", "Thông báo!",
+				String groupName = (String) JOptionPane.showInputDialog(null, "Nhập tên nhóm: ", "Thông báo!",
 						JOptionPane.PLAIN_MESSAGE);
 				if (groupName == null)
 					return;
@@ -548,8 +926,7 @@ public class ClientThread extends Thread {
 					if (userName == null)
 						return;
 					if (userName.length() > 30) {
-						JOptionPane.showMessageDialog(null, "UserName không quá 30 ký tự!", "Error!",
-								JOptionPane.ERROR_MESSAGE);
+						JOptionPane.showMessageDialog(null, "UserName không quá 30 ký tự!", "Error!", JOptionPane.ERROR_MESSAGE);
 						return;
 					}
 					doSendRequest("checkUserNameAddMemberToGroup", userName);
@@ -597,58 +974,57 @@ public class ClientThread extends Thread {
 	}
 
 	private void showFilesListEvent() {
-		clientFrame.getShowFilesList().addListSelectionListener(new ListSelectionListener() {
-			@Override
-			public void valueChanged(ListSelectionEvent e) {
-				if (!e.getValueIsAdjusting()) {
-					FileModel selectedItem = clientFrame.getShowFilesList().getSelectedValue();
-					if (selectedItem != null) {
-
-						int userSelection = clientFrame.getFileDownChooser().showOpenDialog(null);
-						if (userSelection == JFileChooser.APPROVE_OPTION) {
-							doSendRequest("downloadFile", selectedItem.getId() + "", selectedItem.getFileName());
-						} else {
-							return;
-						}
-					}
-				}
-			}
-		});
+	    clientFrame.getShowFilesList().addMouseListener(new MouseAdapter() {
+	        @Override
+	        public void mouseClicked(MouseEvent e) {
+	            // Kiểm tra xem click là chuột trái và click đôi (double-click)
+	            if (e.getClickCount() == 2 && SwingUtilities.isLeftMouseButton(e)) {
+	                JList<FileModel> fileList = clientFrame.getShowFilesList();
+	                int index = fileList.locationToIndex(e.getPoint()); // Lấy vị trí mục được click
+	                if (index >= 0) {
+	                    FileModel selectedItem = fileList.getModel().getElementAt(index); // Lấy giá trị mục
+	                    if (selectedItem != null) {
+	                        int userSelection = clientFrame.getFileDownChooser().showOpenDialog(null);
+	                        if (userSelection == JFileChooser.APPROVE_OPTION) {
+	                            doSendRequest("downloadFile", selectedItem.getId() + "", selectedItem.getFileName());
+	                        }
+	                    }
+	                }
+	            }
+	        }
+	    });
 	}
 
-	private void updateClientInfo(String memberInfo) {
-		String path[] = memberInfo.split("\\<\\?\\>");
-		clientModel.setId(Integer.parseInt(path[0]));
-		clientModel.setName(path[1]);
-		clientFrame.getNickNameTxt().setText(path[1]);
-		clientModel.setAccountId(Integer.parseInt(path[2]));
-		if(path[3].equals("null")) {
-			// khong render
+	private void updateClientInfo(ClientModel clientInfo) {
+		clientFrame.getNickNameTxt().setText(clientModel.getName());
+		
+		if(clientInfo.getGender()) { //true name / false nữ
+			clientFrame.getMaleRadioButton().setSelected(true);
 		} else {
-			clientModel.setGender(path[3]); 
-			if(path[3].equals("Nam")) {
-				clientFrame.getMaleRadioButton().setSelected(true);
-			} else {
-				clientFrame.getFemaleRadioButton().setSelected(true);
-			}
+			clientFrame.getFemaleRadioButton().setSelected(true);
 		}
-		if(!path[4].equals("null")) {
-			clientModel.setPhone(path[4]);
-			clientFrame.getPhoneNumTxt().setText(path[4]);
-		}
-		if(!path[5].equals("null")) {
+		if (clientInfo.getPhone() != null) clientFrame.getPhoneNumTxt().setText(clientInfo.getPhone());
+		if (clientInfo.getBirthday() != null) {
 			SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+	        String formattedDate = dateFormat.format(clientInfo.getBirthday());
+			clientFrame.getBirthdayTxt().setText(formattedDate);
+		}
+		if (clientInfo.getAvata() != null) {
 			try {
-			    java.util.Date utilDate = dateFormat.parse(path[5]);
-			    clientModel.setBirthday(utilDate);
-				clientFrame.getBirthdayTxt().setText(path[5]);
-			} catch (Exception e) {
-			    e.printStackTrace();
+				ByteArrayInputStream byteInputStream = new ByteArrayInputStream(clientInfo.getAvata());
+			    BufferedImage bufferedImage = ImageIO.read(byteInputStream);
+			    Image scaledImage = bufferedImage.getScaledInstance(clientFrame.getAvataLabel().getWidth(), clientFrame.getAvataLabel().getHeight(), Image.SCALE_SMOOTH);
+			    clientFrame.getAvataLabel().setText("");
+			    clientFrame.getAvataLabel().setIcon(new ImageIcon(scaledImage));
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
+
 		}
 	}
 	
-	private void doCheckLoginSuccess(String memberInfo) {
+	private void doCheckLoginSuccess(ClientModel memberInfo) {
 		updateClientInfo(memberInfo);
 		login.setVisible(false);
 

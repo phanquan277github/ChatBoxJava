@@ -40,9 +40,10 @@ public class Server {
 				public void run() {
 					serverFrame = new ServerFrame();
 		            try {
-						String ipAddress = InetAddress.getLocalHost().getHostAddress();
-						serverFrame.getLabelAddress().setText(ipAddress);
-					} catch (UnknownHostException e) {
+//						String ipAddress = InetAddress.getLocalHost().getHostAddress();
+//						serverFrame.getLabelAddress().setText(ipAddress);
+						serverFrame.getTxtPort().setText("7777");
+					} catch (Exception e) {
 						e.printStackTrace();
 					}
 					StartServerEvent();
@@ -61,11 +62,12 @@ public class Server {
 		 for (ServerThread thread : mThreadManager.getServerThreadList()) {
 	            String ipAddress = thread.getSocket().getInetAddress().getHostAddress();
 	            String timeIn = thread.getClient().getTimeIn();
+	            int port = thread.getSocket().getPort();
 	            serverFrame.getClientTableModel().addRow(new Object[]{
 	                ipAddress,
 	                timeIn,
-	                "Ngắt kết nối", // Dòng mô tả cho nút
-	                ""
+	                port,
+	                "Ngắt kết nối"
 	            });
 	        }
 	}
@@ -78,28 +80,27 @@ public class Server {
 		        int col = serverFrame.getTableClientAccess().columnAtPoint(evt.getPoint()); // Lấy cột được click
 
 		        // Kiểm tra nếu cột là "Ngắt kết nối"
-		        if (col == 2) {
-		            String ipAddress = (String) serverFrame.getTableClientAccess().getValueAt(row, 0); // Lấy IP Address từ hàng
+		        if (col == 3) {
+		            int port = Integer.parseInt(serverFrame.getTableClientAccess().getValueAt(row, 2).toString()); // Lấy IP Address từ hàng
 
 		            // Hiển thị hộp thoại xác nhận
-		            int result = JOptionPane.showConfirmDialog(serverFrame, "Bạn có chắc chắn muốn ngắt kết nối client " + ipAddress + "?", "Xác nhận", JOptionPane.YES_NO_OPTION);
+		            int result = JOptionPane.showConfirmDialog(serverFrame, "Bạn có chắc chắn muốn ngắt kết nối client " + port + "?", "Xác nhận", JOptionPane.YES_NO_OPTION);
 		            if (result == JOptionPane.YES_OPTION) {
-		                disconnectClient(ipAddress); // Gọi hàm ngắt kết nối
+		                disconnectClient(port); // Gọi hàm ngắt kết nối
 		            }
 		        }
 		    }
 		});
-
 	}
 	
-	private static void disconnectClient(String ipAddress) {
+	private static void disconnectClient(int port) {
 	    for (ServerThread thread : Server.mThreadManager.getServerThreadList()) {
-	        if (thread.getSocket().getInetAddress().getHostAddress().equals(ipAddress)) {
+	        if (thread.getSocket().getPort() == port) {
 	            try {
 	                thread.getSocket().close(); // Đóng socket
 	                Server.mThreadManager.remove(thread); // Xóa khỏi danh sách quản lý
 	                loadClientTable(); // Cập nhật lại danh sách client
-	                JOptionPane.showMessageDialog(serverFrame, "Ngắt kết nối client " + ipAddress + " thành công!");
+	                JOptionPane.showMessageDialog(serverFrame, "Ngắt kết nối client " + port + " thành công!");
 	                return;
 	            } catch (IOException e) {
 	                e.printStackTrace();
@@ -116,6 +117,9 @@ public class Server {
 				serverThread = new Thread(() -> {
 					try {
 						serverSocket = new ServerSocket(PORT);
+						InetAddress serverAddress = serverSocket.getInetAddress();
+//						String ipAddress = serverAddress.getByName("192.168.42.23");
+						serverFrame.getLabelAddress().setText("192.168.42.23");
 	    				serverFrame.getLableRunning().setText("Server đang mở!");
 	    				
 						while (!serverSocket.isClosed()) {
@@ -166,6 +170,4 @@ public class Server {
 			}
 		});
 	}
-
-    
 }
